@@ -15,6 +15,10 @@ from rest_framework.permissions import AllowAny
 from .serializers import UserSerializer
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.generics import ListAPIView
+from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import IsAuthenticated
 
 class TaskListCreate(APIView):
     def get(self, request):
@@ -24,7 +28,7 @@ class TaskListCreate(APIView):
         return Response(serializer.data)
 
     def post(self, request):
-        # Associate the task with the authenticated user
+        # Create task without requiring the 'user' field in the request
         serializer = TaskSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(user=request.user)  # Save task with user
@@ -43,14 +47,59 @@ class TaskListCreate(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
+
+# class TaskDetail(APIView):
+#     def get(self, request, pk):
+#         try:
+#             task = Task.objects.get(pk=pk, user=request.user)  # Fetch task by ID for the authenticated user
+#             serializer = TaskSerializer(task)
+#             return Response(serializer.data)
+#         except Task.DoesNotExist:
+#             return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+
+#     def put(self, request, pk):
+#         try:
+#             task = Task.objects.get(pk=pk, user=request.user)  # Ensure the task belongs to the user
+#             serializer = TaskSerializer(task, data=request.data)
+#             if serializer.is_valid():
+#                 serializer.save()
+#                 return Response(serializer.data)
+#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+#         except Task.DoesNotExist:
+#             return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+class TaskDetailUpdateDelete(APIView):
+    def get(self, request, pk):
+        # Get the task with the given primary key (pk) for the authenticated user
+        task = get_object_or_404(Task, pk=pk, user=request.user)
+        serializer = TaskSerializer(task)
+        return Response(serializer.data)
+    
+    def put(self, request, pk):
+        # Update the task with the given primary key (pk) for the authenticated user
+        task = get_object_or_404(Task, pk=pk, user=request.user)
+        serializer = TaskSerializer(task, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, request, pk):
+        # Delete the task with the given primary key (pk) for the authenticated user
+        try:
+            task = get_object_or_404(Task, pk=pk, user=request.user)
+            task.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Task.DoesNotExist:
+            raise PermissionDenied("You do not have permission to delete this task.")
+    
+
+class UserListView(ListAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+
 # Homepage view for '/'
 def homepage(request):
     return HttpResponse("<h1>Welcome to the Task Manager API</h1>")
-
-# class RegisterUser(generics.CreateAPIView):
-#     queryset = User.objects.all()
-#     serializer_class = UserSerializer
-#     permission_classes = [AllowAny]  # Allow any user to access this view
 
 
 class RegisterUser(APIView):
